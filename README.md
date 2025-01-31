@@ -9,7 +9,6 @@
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Morphological Smoothing](#morphological-smoothing)
 - [Project Structure](#project-structure)
 - [Exporting the YOLOv8 Dataset](#exporting-the-yolov8-dataset)
 - [Notes and Future Enhancements](#notes-and-future-enhancements)
@@ -38,7 +37,7 @@
 
 ## Requirements
 
-- **Python 3.7+**
+- **Python 3.9**
 - **Tkinter** (usually ships with standard Python on most OS; otherwise install appropriate system packages)
 - **PyTorch** (with or without CUDA, depending on your system)
 - **segment_anything** (SAM from [GitHub repo](https://github.com/facebookresearch/segment-anything))
@@ -51,10 +50,7 @@ To use the Segment Anything Model (SAM), you need to download the official model
 Example installation (assuming a virtual environment):
 
 ```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118  # For CUDA 11.8
-pip install numpy opencv-python pillow scikit-learn pyyaml
-# Next install segment_anything (if needed, from source):
-# pip install git+https://github.com/facebookresearch/segment-anything.git
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 #For Cuda
 ```
 
 *(Adjust torch versions/index URL for your CUDA setup.)*
@@ -69,21 +65,13 @@ pip install numpy opencv-python pillow scikit-learn pyyaml
    cd Smart-Polygon-Annotator
    ```
 
-2. **Ensure `.gitignore`** is skipping model files (`*.pth`):
-   ```plaintext
-   *.pth
-   __pycache__/
-   *.pyc
-   ...
-   ```
-
-3. **Install dependencies** via pip:
+2. **Install dependencies** via pip:
    ```bash
    pip install -r requirements.txt
    ```
    or manually install the packages listed under [Requirements](#requirements).
 
-4. **Download SAM model checkpoints** as mentioned in the section above and place them in the correct directory.
+3. **Download SAM model checkpoints** as mentioned in the section above and place them in the project directory.
 
 ---
 
@@ -111,12 +99,6 @@ pip install numpy opencv-python pillow scikit-learn pyyaml
    - Once you’re done annotating, click **“Export Dataset”**.
    - Choose an **export directory** to store your YOLOv8-style dataset.
    - The script splits your images into `train`, `val`, and `test` folders and places corresponding `.txt` label files under `labels/`.
-
----
-
-## License
-
-This project is released under the [MIT License](LICENSE) (or choose your own). You are free to modify or distribute it under the terms of that license.
 
 ---
 
