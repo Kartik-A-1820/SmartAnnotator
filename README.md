@@ -18,6 +18,8 @@
 
 ## Features
 
+## Features
+
 1. **Interactive Annotation**  
    - Click on an image to generate a mask automatically using SAM.
    - Preview the mask, accept or discard it, and store multiple annotations per image.
@@ -25,10 +27,22 @@
 2. **Polygon + Bounding Box Storage**  
    - Each accepted mask is stored as a set of polygon points and a bounding box in the application’s memory.
 
-3. **One-Click YOLOv8 Export**  
+3. **Different Mask Colors**  
+   - Each mask is assigned a unique color for better visualization of multiple objects in the image.
+
+4. **One-Click YOLOv8 Export**  
    - Automatically splits the dataset into `train`, `val`, and `test` sets.
    - Creates YOLOv8 segmentation labels with normalized polygon coordinates.
    - Generates a `data.yaml` for easy YOLOv8 training.
+
+5. **Multi-Class Support**  
+   - Allows users to annotate and classify multiple object classes within the same image.
+
+6. **Zoom In & Out**  
+   - Users can zoom in and out on images using the mouse scroll button for precise annotations.
+
+7. **Undo & Redo**  
+   - Undo or redo the last annotation action to correct mistakes efficiently.
 
 ---
 
@@ -84,10 +98,14 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
    - Click **“Upload Images”** to select multiple image files (`.jpg`, `.jpeg`, `.png`).
    - The first image appears on the canvas.
 
+   ![Image Upload](src/1.png)
+
 3. **Annotate**:
    - **Left-click** on a region of the image where you want to generate a mask.
    - A mask is generated automatically (using the SAM model).
    - A confirmation dialog appears—choose **“Keep”** or **“Discard”** for the mask.
+
+   ![Annotation Confirmation](src/2.png)
 
 4. **Navigate Images**:
    - Click **“Previous”** or **“Next”** to cycle through images.
@@ -96,6 +114,8 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
    - Once you’re done annotating, click **“Export Dataset”**.
    - Choose an **export directory** to store your YOLOv8-style dataset.
    - The script splits your images into `train`, `val`, and `test` folders and places corresponding `.txt` label files under `labels/`.
+
+   ![Export Dataset](src/3.png)
 
 ---
 
