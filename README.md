@@ -58,8 +58,8 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 1. **Clone** this repository:
    ```bash
-   git clone https://github.com/Kartik-A-1820/Smart-Polygon-Annotator.git
-   cd Smart-Polygon-Annotator
+   git clone https://github.com/Kartik-A-1820/SmartAnnotator.git
+   cd SmartAnnotator
    ```
 
 2. **Install dependencies** via pip:
