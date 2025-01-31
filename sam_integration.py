@@ -5,12 +5,15 @@ import numpy as np
 from segment_anything.utils.transforms import ResizeLongestSide
 
 def load_sam_model(device="cuda" if torch.cuda.is_available() else "cpu"):
+    
     if device == "cuda":
         sam_checkpoint = "sam_vit_h_4b8939.pth"
         model_type = "vit_h"
     else:
         sam_checkpoint = "sam_vit_b_01ec64.pth"
         model_type = "vit_b"
+
+    print(f"Using Device: {device} and Model: {sam_checkpoint},Type: {model_type}")
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
     return SamPredictor(sam)
