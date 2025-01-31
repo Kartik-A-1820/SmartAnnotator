@@ -25,10 +25,7 @@
 2. **Polygon + Bounding Box Storage**  
    - Each accepted mask is stored as a set of polygon points and a bounding box in the application’s memory.
 
-3. **Automatic Smoothing**  
-   - Optional morphological operations and polygon approximation to reduce noise and create simpler, more enclosed masks.
-
-4. **One-Click YOLOv8 Export**  
+3. **One-Click YOLOv8 Export**  
    - Automatically splits the dataset into `train`, `val`, and `test` sets.
    - Creates YOLOv8 segmentation labels with normalized polygon coordinates.
    - Generates a `data.yaml` for easy YOLOv8 training.
