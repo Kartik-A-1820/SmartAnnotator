@@ -1,0 +1,11 @@
+# Ignore Python compiled files
+__pycache__/
+*.pyc
+
+# Ignore model checkpoint files
+*.pth
+
+# (Add any other files or folders you want to skip)
+# e.g. large directories, credentials, etc.
+"*.pth" 
+"__pycache__/" 
