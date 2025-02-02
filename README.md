@@ -9,10 +9,7 @@
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Project Structure](#project-structure)
 - [Exporting the YOLOv8 Dataset](#exporting-the-yolov8-dataset)
-- [Notes and Future Enhancements](#notes-and-future-enhancements)
-- [License](#license)
 
 ---
 
