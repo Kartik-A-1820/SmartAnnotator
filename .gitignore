@@ -1,11 +1,13 @@
-# Ignore Python compiled files
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
-# Ignore model checkpoint files
+# Model checkpoints
+checkpoints/
 *.pth
+*.pt
+*.part
 
-# (Add any other files or folders you want to skip)
-# e.g. large directories, credentials, etc.
-"*.pth" 
-"__pycache__/" 
+# Annotation project files created next to images
+smartannotator_project.json
