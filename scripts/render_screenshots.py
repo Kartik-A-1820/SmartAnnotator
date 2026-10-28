@@ -69,6 +69,17 @@ class Director:
                   and self.window.events.empty(), timeout=60)
         self.pump(0.3)
 
+    def drag(self, start, end):
+        (ax, ay), (bx, by) = self.at(*start), self.at(*end)
+        request = self.smart.request_id
+        self.canvas.event_generate("<ButtonPress-1>", x=ax, y=ay)
+        for t in (0.25, 0.5, 0.75, 1.0):
+            self.canvas.event_generate("<B1-Motion>", x=int(ax + (bx - ax) * t), y=int(ay + (by - ay) * t))
+        self.canvas.event_generate("<ButtonRelease-1>", x=bx, y=by)
+        self.wait(lambda: self.smart.request_id > request and not self.window.worker.busy_predicting
+                  and self.window.events.empty(), timeout=60)
+        self.pump(0.3)
+
     def key(self, sequence):
         self.root.event_generate(sequence)
         self.pump(0.2)
@@ -126,10 +137,10 @@ def main():
     d = Director(root, window)
     d.wait_ready()
 
-    # Coffee: cup (two clicks: rim and body), saucer, spoon
+    # Coffee: cup (rim, body and handle), saucer, spoon
     window.show_image(window.project.images.index(os.path.join(work, "coffee.jpg")))
     d.wait_ready()
-    d.segment(5, [(200, 60), (240, 215)])
+    d.segment(5, [(200, 60), (240, 215), (225, 265)])
     d.segment(6, [(130, 300)])
     d.segment(7, [(365, 290)])
 
@@ -141,14 +152,27 @@ def main():
     window.show_image(window.project.images.index(os.path.join(work, "astronaut.jpg")))
     d.wait_ready()
     d.frame(1200)
-    for class_key, (x, y) in ((2, (390, 440)), (3, (30, 150)), (4, (420, 150))):
-        d.key(f"<Key-{class_key}>")
-        d.hover(x, y)
-        d.frame(900)
-        d.click(x, y)
-        d.frame(700)
-        d.key("<Return>")
-        d.frame(600)
+    d.key("<Key-2>")                       # helmet: hover preview, then one click
+    d.hover(390, 440)
+    d.frame(900)
+    d.click(390, 440)
+    d.frame(700)
+    d.key("<Return>")
+    d.frame(600)
+    d.key("<Key-3>")                       # flag: box prompt
+    d.drag((0, 0), (115, 365))
+    d.frame(1000)
+    d.key("<Return>")
+    d.frame(600)
+    d.key("<Key-4>")                       # model rocket: tank and orbiter, two positive clicks
+    d.hover(420, 100)
+    d.frame(700)
+    d.click(420, 100)
+    d.frame(700)
+    d.click(385, 250)
+    d.frame(900)
+    d.key("<Return>")
+    d.frame(600)
     d.key("<Key-1>")
     d.hover(200, 330)
     d.frame(900)
