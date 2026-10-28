@@ -206,3 +206,8 @@ The test suite has three layers:
   segments flat-colored shapes, so each tool's output can be checked exactly.
 
 CI runs lint and the full suite on every push.
+
+## License
+
+MIT; see [LICENSE](LICENSE). The SAM, SAM 2 and MobileSAM weights are Apache-2.0. EdgeSAM is under the
+NTU S-Lab License 1.0 and EdgeTAM under Apache-2.0; check a model's license before commercial use.
