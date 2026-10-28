@@ -31,12 +31,13 @@ _SAM2_URL = "https://dl.fbaipublicfiles.com/segment_anything_2/092824/"
 class ModelSpec:
     key: str
     label: str
-    backend: str      # "sam2", "segment_anything" or "mobile_sam"
-    arch: str         # registry key (SAM 1 / MobileSAM) or hydra config (SAM 2)
+    backend: str      # "sam2", "segment_anything", "mobile_sam", "edge_sam" or "edgetam"
+    arch: str         # registry key (SAM 1 style) or hydra config (SAM 2 style)
     checkpoint: str
     url: str
     size_mb: int
     notes: str
+    experimental: bool = False  # never picked by Auto; chosen explicitly
 
 
 MODELS = OrderedDict((m.key, m) for m in [
@@ -64,6 +65,13 @@ MODELS = OrderedDict((m.key, m) for m in [
     ModelSpec("sam_vit_h", "SAM ViT-H", "segment_anything", "vit_h",
               "sam_vit_h_4b8939.pth", _SAM1_URL + "sam_vit_h_4b8939.pth",
               2445, "Original SAM, huge. 8 GB+ GPUs; slow."),
+    # Distilled models: much smaller encoders trained to imitate SAM / SAM 2
+    ModelSpec("edge_sam", "EdgeSAM (distilled SAM)", "edge_sam", "edge_sam",
+              "edge_sam_3x.pth", "https://huggingface.co/spaces/chongzhou/EdgeSAM/resolve/main/weights/edge_sam_3x.pth",
+              38, "Experimental. Fastest model; ~1.6x MobileSAM speed, better masks.", experimental=True),
+    ModelSpec("edgetam", "EdgeTAM (distilled SAM 2)", "edgetam", "configs/edgetam.yaml",
+              "edgetam.pt", "https://github.com/facebookresearch/EdgeTAM/raw/refs/heads/main/checkpoints/edgetam.pt",
+              54, "Experimental. SAM 2 distilled to a tiny encoder; very fast.", experimental=True),
 ])
 
 # Preference order per hardware tier (minimum VRAM in GB -> models, best first).
@@ -76,11 +84,15 @@ _GPU_TIERS = [
 ]
 _CPU_ORDER = ["mobile_sam", "sam2.1_tiny", "sam2.1_small", "sam_vit_b"]
 
-_BACKEND_MODULES = {"sam2": "sam2", "segment_anything": "segment_anything", "mobile_sam": "mobile_sam"}
+_BACKEND_MODULES = {"sam2": "sam2", "segment_anything": "segment_anything", "mobile_sam": "mobile_sam",
+                    "edge_sam": "edge_sam", "edgetam": "sam2"}
 _BACKEND_INSTALL = {
     "sam2": "pip install sam2",
     "segment_anything": "pip install segment-anything",
     "mobile_sam": "pip install git+https://github.com/ChaoningZhang/MobileSAM.git",
+    "edge_sam": "pip install git+https://github.com/chongzhou96/EdgeSAM.git",
+    # EdgeTAM ships as a fork of the `sam2` package (it keeps the SAM 2.1 configs)
+    "edgetam": "pip install git+https://github.com/facebookresearch/EdgeTAM.git",
 }
 
 
@@ -111,7 +123,15 @@ def detect_device(preferred="auto"):
     return DeviceInfo("cpu", f"CPU ({os.cpu_count()} threads)")
 
 
+def _sam2_package_has(config):
+    spec = importlib.util.find_spec("sam2")
+    return spec is not None and any(os.path.isfile(os.path.join(d, config))
+                                    for d in spec.submodule_search_locations or [])
+
+
 def backend_installed(backend):
+    if backend == "edgetam":  # same module name as SAM 2: look for its config instead
+        return _sam2_package_has(MODELS["edgetam"].arch)
     return importlib.util.find_spec(_BACKEND_MODULES[backend]) is not None
 
 
@@ -131,7 +151,7 @@ def candidate_models(device_info):
         order = _GPU_TIERS[2][1]
     else:
         order = _CPU_ORDER
-    installed = available_models()
+    installed = [k for k in available_models() if not MODELS[k].experimental]
     ranked = [k for k in order if k in installed]
     # Models already on disk are a better fallback than ones needing a download
     rest = sorted((k for k in installed if k not in ranked), key=lambda k: find_checkpoint(MODELS[k]) is None)
@@ -262,7 +282,24 @@ class _Sam2Adapter:
         return masks > 0.5 if masks.dtype != bool else masks, scores
 
 
-ADAPTERS = {"sam2": _Sam2Adapter, "segment_anything": _Sam1Adapter, "mobile_sam": _Sam1Adapter}
+class _EdgeSamAdapter(_Sam1Adapter):
+    """EdgeSAM keeps SAM's predictor but takes a mask count instead of
+    multimask_output (and its first predict() argument is `features`)."""
+
+    def predict(self, points, labels, box, multimask, out_hw):
+        p = self.predictor
+        full = p.original_size
+        p.original_size = tuple(out_hw)
+        try:
+            masks, scores, _ = p.predict(point_coords=points, point_labels=labels, box=box,
+                                         num_multimask_outputs=3 if multimask else 1)
+        finally:
+            p.original_size = full
+        return masks, scores
+
+
+ADAPTERS = {"sam2": _Sam2Adapter, "segment_anything": _Sam1Adapter, "mobile_sam": _Sam1Adapter,
+            "edge_sam": _EdgeSamAdapter, "edgetam": _Sam2Adapter}
 
 
 class SamEngine:

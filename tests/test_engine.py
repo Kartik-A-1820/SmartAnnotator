@@ -85,3 +85,64 @@ def test_working_resolution_matches_full_resolution(key):
         ref = cv2.resize(full[0].astype(np.uint8), (600, 360), interpolation=cv2.INTER_AREA) > 0
         inter, union = (ref & small[0]).sum(), (ref | small[0]).sum()
         assert union == 0 or inter / union > 0.9
+
+
+def test_experimental_models_never_auto_selected(monkeypatch):
+    monkeypatch.setattr(si, "available_models", lambda: list(si.MODELS))
+    for info in [si.DeviceInfo("cpu", "cpu"), si.DeviceInfo("cuda", "GTX 1650 Ti", 3.81, True),
+                 si.DeviceInfo("cuda", "4090", 24.0, True)]:
+        ranked = si.candidate_models(info)
+        assert "edge_sam" not in ranked and "edgetam" not in ranked
+
+
+def test_edgetam_detected_by_its_config(monkeypatch, tmp_path):
+    """EdgeTAM installs as a `sam2` fork, so it is detected by its config file."""
+    import types
+    (tmp_path / "configs").mkdir()
+    fake = types.SimpleNamespace(submodule_search_locations=[str(tmp_path)])
+    monkeypatch.setattr(si.importlib.util, "find_spec", lambda name: fake if name == "sam2" else None)
+    assert si.backend_installed("sam2") and not si.backend_installed("edgetam")
+    (tmp_path / "configs" / "edgetam.yaml").write_text("")
+    assert si.backend_installed("edgetam")
+
+
+def test_edge_sam_adapter_uses_mask_count_api(monkeypatch):
+    """Stand-in with EdgeSAM's predictor signature: features first, and
+    num_multimask_outputs instead of multimask_output."""
+    import sys
+    import types
+    calls = []
+
+    class FakeModel:
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+    class FakePredictor:
+        def __init__(self, model):
+            self.original_size = None
+
+        def set_image(self, image):
+            self.features = torch.zeros(1)
+            self.original_size, self.input_size = image.shape[:2], (1024, 1024)
+
+        def predict(self, features=None, point_coords=None, point_labels=None, box=None, mask_input=None,
+                    num_multimask_outputs=3, return_logits=False, use_stability_score=False):
+            calls.append((num_multimask_outputs, tuple(self.original_size), point_coords.tolist()))
+            h, w = self.original_size
+            return (np.ones((num_multimask_outputs, h, w), bool), np.linspace(0.9, 0.5, num_multimask_outputs),
+                    None)
+
+    module = types.SimpleNamespace(sam_model_registry={"edge_sam": lambda checkpoint: FakeModel()},
+                                   SamPredictor=FakePredictor)
+    monkeypatch.setitem(sys.modules, "edge_sam", module)
+    monkeypatch.setattr(si, "backend_installed", lambda backend: True)
+    engine = si.SamEngine("edge_sam", si.DeviceInfo("cpu", "cpu"))
+    engine.set_image("a", np.zeros((400, 800, 3), np.uint8))
+    masks, scores, scale = engine.predict([[400, 200]], [1], max_side=400)
+    assert masks.shape == (3, 200, 400) and scale == (0.5, 0.5)
+    engine.predict([[400, 200], [10, 10]], [1, 0])
+    assert calls == [(3, (200, 400), [[200.0, 100.0]]), (1, (400, 800), [[400.0, 200.0], [10.0, 10.0]])]
+    assert engine._adapter.predictor.original_size == (400, 800)  # restored after the call

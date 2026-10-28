@@ -207,7 +207,14 @@ class MainApplication(ttk.Frame):
         m.add_radiobutton(label=f"Auto - best for this PC ({rec_label})", value="auto",
                           variable=self.model_var, command=self._load_model)
         m.add_separator()
-        for key, spec in MODELS.items():
+        stable = [k for k, s in MODELS.items() if not s.experimental]
+        experimental = [k for k, s in MODELS.items() if s.experimental]
+        for key in stable + [None] + experimental:
+            if key is None:
+                m.add_separator()
+                m.add_command(label="Experimental - distilled, super fast:", state=tk.DISABLED)
+                continue
+            spec = MODELS[key]
             installed = backend_installed(spec.backend)
             label = f"{spec.label}  ({spec.size_mb} MB) - {spec.notes}"
             if not installed:

@@ -88,6 +88,20 @@ Leave **Model > Auto** selected and the app picks for you. *Help > Hardware Info
 | [SAM ViT-L](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth) | 1.2 GB | slow | very good | 6 GB+ GPUs |
 | [SAM ViT-H](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth) | 2.4 GB | slowest | very good | 8 GB+ GPUs |
 
+### Experimental: distilled models (super fast)
+
+Distilled models use a much smaller image encoder trained to imitate SAM or SAM 2. Encoding is several times faster,
+which matters most on CPU and for flipping through images quickly. Mask quality is somewhat below the full models.
+Auto never picks them. Choose them under **Model > Experimental**, or with `--model edge_sam` / `--model edgetam`.
+
+| Model | Download | Notes | Install |
+|---|---|---|---|
+| [EdgeSAM](https://github.com/chongzhou96/EdgeSAM) | ~38 MB | Distilled SAM. Reports 164 FPS vs 104 for MobileSAM on an RTX 2080 Ti, with better point-prompt accuracy. NTU S-Lab license (check before commercial use). | `pip install git+https://github.com/chongzhou96/EdgeSAM.git` |
+| [EdgeTAM](https://github.com/facebookresearch/EdgeTAM) | 54 MB | Meta's SAM 2 distilled for phones (reported 22x faster than SAM 2). Apache-2.0. | `pip install git+https://github.com/facebookresearch/EdgeTAM.git` |
+
+EdgeTAM installs as a modified copy of the `sam2` package and replaces the official one. It still includes the
+SAM 2.1 configs, so the SAM 2.1 models should keep working. To go back, run `pip install --force-reinstall sam2`.
+
 ### GTX 1650 / 1650 Ti (4 GB) tips
 - Auto picks **SAM 2.1 Small** in **fp16**: a small model (46M parameters) that fits comfortably in 4 GB, with
   better masks than SAM ViT-B. If you want maximum speed, choose **SAM 2.1 Tiny**.
