@@ -1,8 +1,12 @@
 name: Screenshots
 
 # Renders the README screenshots with real SAM 2.1 weights on a virtual display
-# and pushes them to the `screenshots` branch for review.
-on: workflow_dispatch
+# and pushes them to the `screenshots` branch for review. Run it from the
+# Actions tab, or by pushing to the `render-screenshots` branch.
+on:
+  workflow_dispatch:
+  push:
+    branches: [render-screenshots]
 
 permissions:
   contents: write
