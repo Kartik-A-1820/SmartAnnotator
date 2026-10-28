@@ -235,3 +235,22 @@ def test_detail_slider_navigation_and_autosave(ui, tmp_path):
     assert window.index == 1
     ui.pump(1.3)                             # autosave is debounced by one second
     assert os.path.exists(tmp_path / "smartannotator_project.json")
+
+
+def test_mask_fill_levels(ui):
+    window = ui.window
+    ui.key("<b>")
+    ui.drag((100, 100), (300, 200))
+    window.hover = None
+
+    def fill_alpha():
+        return window._draw_overlay((1200, 800), (0, 0), 1.0).getpixel((200, 150))[3]
+
+    assert fill_alpha() == round(255 * 0.35)   # Light by default
+    ui.key("<o>")
+    assert fill_alpha() == round(255 * 0.50)   # Medium
+    ui.key("<o>")
+    assert fill_alpha() == round(255 * 0.70)   # Strong
+    ui.key("<o>")
+    assert fill_alpha() == 0                   # Off: outline only
+    assert window.settings.get("mask_fill") == 0

@@ -27,7 +27,8 @@ Everywhere
   N                     next image without annotations
   Del                   delete object under cursor (or selected)
   C                     set object under cursor to the current class
-  H  show/hide annotations    F  fit to window
+  H  show/hide annotations    O  mask fill (off / light / medium / strong)
+  F  fit to window
   Mouse wheel  zoom           Middle drag / Ctrl+drag  pan
   Ctrl+Z / Ctrl+Y       undo / redo
   Ctrl+O  open folder   Ctrl+S  save   Ctrl+E  export

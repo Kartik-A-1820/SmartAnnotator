@@ -24,6 +24,8 @@ from .tools import TOOL_CLASSES
 from .viewport import FrameRenderer, Viewport
 
 PREFETCH_AHEAD = 1
+MASK_FILL_LEVELS = {"Off": 0, "Light": 35, "Medium": 50, "Strong": 70}  # fill opacity, percent
+DEFAULT_MASK_FILL = 35
 AUTOSAVE_DELAY_MS = 1000
 POLL_INTERVAL_MS = 15
 CONTROL = 0x0004
@@ -58,6 +60,7 @@ class MainWindow(ttk.Frame):
 
         self.tool_var = tk.StringVar(value="smart")
         self.show_annotations = tk.BooleanVar(value=True)
+        self.mask_fill = tk.IntVar(value=settings.get("mask_fill", DEFAULT_MASK_FILL))
         self.hover_preview = tk.BooleanVar(value=settings.get("hover_preview", True))
         self.tolerance_var = tk.DoubleVar(value=float(settings.get("tolerance", DEFAULT_TOLERANCE)))
         model = model or settings.get("model", "auto")
@@ -125,6 +128,10 @@ class MainWindow(ttk.Frame):
                                   command=self.request_render)
         view_menu.add_checkbutton(label="Smart Hover Preview", variable=self.hover_preview,
                                   command=self._on_hover_preview_toggled)
+        view_menu.add_separator()
+        for name, percent in MASK_FILL_LEVELS.items():
+            view_menu.add_radiobutton(label=f"Mask Fill: {name}", value=percent, variable=self.mask_fill,
+                                      accelerator="O" if name == "Off" else "", command=self._on_mask_fill_changed)
 
         model_menu = submenu("Model", [])
         ranked = models.candidate_models(models.detect_device(self.device))
@@ -255,6 +262,7 @@ class MainWindow(ttk.Frame):
             "<a>": self.prev_image, "<Left>": self.prev_image, "<Prior>": self.prev_image,
             "<n>": self.next_unlabeled, "<Delete>": self.delete_object, "<BackSpace>": self.on_backspace,
             "<c>": self.recolor_object, "<f>": self.fit_view, "<h>": self.toggle_annotations,
+            "<o>": self.cycle_mask_fill,
             "<Control-z>": self.undo, "<Control-y>": self.redo, "<Control-Z>": self.redo,
             "<Control-s>": self.save, "<Control-o>": self.open_folder, "<Control-e>": self.export,
             "<F1>": self.show_help,
@@ -538,6 +546,18 @@ class MainWindow(ttk.Frame):
         self.show_annotations.set(not self.show_annotations.get())
         self.request_render()
 
+    def cycle_mask_fill(self):
+        levels = list(MASK_FILL_LEVELS.values())
+        current = self.mask_fill.get()
+        self.mask_fill.set(levels[(levels.index(current) + 1) % len(levels)] if current in levels else levels[1])
+        self._on_mask_fill_changed()
+
+    def _on_mask_fill_changed(self):
+        self.settings.update(mask_fill=self.mask_fill.get())
+        name = next((n for n, p in MASK_FILL_LEVELS.items() if p == self.mask_fill.get()), "custom")
+        self.set_status(f"Mask fill: {name} (O to change)")
+        self.request_render()
+
     def _canvas_size(self):
         return max(self.canvas.winfo_width(), 10), max(self.canvas.winfo_height(), 10)
 
@@ -601,11 +621,16 @@ class MainWindow(ttk.Frame):
         def to_frame(polygon):
             return ((np.asarray(polygon, dtype=np.float32) - offset) * scale).ravel().tolist()
 
+        # Masks are tinted with their class color; the one under the cursor or
+        # selected is tinted more strongly so it stands out from its neighbors
+        fill = round(255 * self.mask_fill.get() / 100)
+        focus_fill = min(230, fill + 70)
         for i, ann in enumerate(anns):
             rgb = hex_to_rgb(self.class_color(ann["class_id"]))
             focused = i in (self.hover, self.selected_obj)
+            alpha = focus_fill if focused else fill
             for poly in ann["polygons"]:
-                draw.polygon(to_frame(poly), fill=rgb + (130 if focused else 60,), outline=rgb + (255,),
+                draw.polygon(to_frame(poly), fill=rgb + (alpha,) if alpha else None, outline=rgb + (255,),
                              width=3 if focused else 2)
         self.tool.draw_overlay(draw, to_frame)
         return overlay if overlay.getbbox() else None
