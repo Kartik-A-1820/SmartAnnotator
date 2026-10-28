@@ -1,0 +1,34 @@
+name: Screenshots
+
+# Renders the README screenshots with real SAM 2.1 weights on a virtual display
+# and pushes them to the `screenshots` branch for review.
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb
+      - name: Install Python packages
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[sam2]" scikit-image
+      - name: Render
+        run: xvfb-run -a -s "-screen 0 1280x900x24" python scripts/render_screenshots.py --out docs/images
+      - name: Push to the screenshots branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b screenshots
+          git add docs/images
+          git commit -m "Render README screenshots"
+          git push -f origin screenshots
