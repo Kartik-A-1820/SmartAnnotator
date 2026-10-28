@@ -5,7 +5,7 @@ import pytest
 import yaml
 from PIL import Image
 
-from dataset_export import export_dataset, export_yolo_dataset, split_items
+from smartannotator.export import export_dataset, split_items
 
 
 @pytest.mark.parametrize("n", [1, 2, 3, 5, 20, 100])
@@ -37,7 +37,7 @@ def read_labels(out):
         if d.exists():
             for f in d.iterdir():
                 lines += f.read_text().split("\n")
-    return [l for l in lines if l]
+    return [line for line in lines if line]
 
 
 def test_yolo_seg_coordinates(tmp_path):
@@ -76,13 +76,11 @@ def test_coco(tmp_path):
     assert total == 3
 
 
-def test_unlabeled_and_legacy_api(tmp_path):
+def test_include_unlabeled_images(tmp_path):
     paths = make_images(tmp_path, 3)
-    out = tmp_path / "out"
-    legacy = {paths[0]: [{"polygon": [[0, 0], [100, 0], [100, 50]], "class_id": 0}]}
-    counts = export_yolo_dataset(legacy, str(out), {0: "thing"})
-    assert sum(counts.values()) == 1
-    counts = export_dataset(paths, legacy, ["thing"], str(tmp_path / "o2"), include_unlabeled=True)
+    annotations = {paths[0]: [ANN]}
+    assert sum(export_dataset(paths, annotations, ["a", "b"], str(tmp_path / "o1")).values()) == 1
+    counts = export_dataset(paths, annotations, ["a", "b"], str(tmp_path / "o2"), include_unlabeled=True)
     assert sum(counts.values()) == 3
 
 

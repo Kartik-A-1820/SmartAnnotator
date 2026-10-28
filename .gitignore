@@ -11,3 +11,9 @@ checkpoints/
 
 # Annotation project files created next to images
 smartannotator_project.json
+
+# Packaging
+*.egg-info/
+build/
+dist/
+.ruff_cache/

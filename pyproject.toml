@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smartannotator"
+version = "2.0.0"
+description = "SAM-assisted polygon and box annotation with YOLO and COCO export"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.1",
+    "torchvision",
+    "numpy",
+    "opencv-python",
+    "pillow>=9.1",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+sam2 = ["sam2"]
+sam = ["segment-anything"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+smartannotator = "smartannotator.app:main"
+
+[tool.setuptools.packages.find]
+include = ["smartannotator*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

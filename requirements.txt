@@ -1,10 +1,10 @@
-# Install PyTorch first with the CUDA build for your GPU (see README), then: pip install -r requirements.txt
+# Install PyTorch for your hardware first (https://pytorch.org/get-started/locally/).
 torch>=2.1
 torchvision
 numpy
 opencv-python
 pillow>=9.1
 pyyaml
-# SAM backends (at least one is required)
-sam2                 # SAM 2.1 tiny/small/base+/large - recommended (Python >= 3.10, torch >= 2.5.1)
-segment-anything     # original SAM ViT-B/L/H
+# SAM backends: at least one is required
+sam2               # SAM 2.1 (Python >= 3.10, torch >= 2.5.1)
+segment-anything   # original SAM
