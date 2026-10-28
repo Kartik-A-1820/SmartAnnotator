@@ -7,6 +7,8 @@ Hover over an object to preview its mask, click to keep it, refine with positive
 and export to YOLO or COCO. Built to stay responsive on modest hardware, including 4 GB GPUs such as the
 GTX 1650 and CPU-only laptops.
 
+![Labeling with hover preview, box prompt and multi-point clicks](docs/images/demo.gif)
+
 ## Features
 
 - **Smart polygon tool**: hover preview, positive/negative point prompts, box prompts and alternative
@@ -18,6 +20,19 @@ GTX 1650 and CPU-only laptops.
   class edits, and reopening resumes at the first unlabeled image.
 - **Export** to YOLO segmentation, YOLO detection or COCO, with deterministic train/val/test splits,
   EXIF orientation handled and a ready-to-train `data.yaml`.
+
+## Screenshots
+
+All masks below were produced by SAM 2.1 Small running on CPU. The screenshots are rendered by
+[`scripts/render_screenshots.py`](scripts/render_screenshots.py), which drives the real app with
+synthetic input; the [Screenshots workflow](.github/workflows/screenshots.yml) re-renders them on demand.
+Sample photos are from scikit-image's public-domain data set.
+
+| | |
+|---|---|
+| **One click.** The mask preview (white outline) appears before accepting; saved masks are tinted with their class color. | ![Smart polygon](docs/images/smart_polygon.png) |
+| **Negative point.** A positive click on the saucer plus a right-click on the cup removes the cup from the mask. | ![Negative point](docs/images/negative_point.png) |
+| **Edit tool.** The selected object shows draggable vertex handles. | ![Edit tool](docs/images/edit_tool.png) |
 
 ## Performance
 
