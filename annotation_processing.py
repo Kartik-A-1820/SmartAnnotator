@@ -6,6 +6,24 @@ import numpy as np
 DETAIL_LEVELS = {"fine": 0.5, "normal": 1.0, "coarse": 2.5}
 
 
+def detail_tolerance(detail):
+    if isinstance(detail, (int, float)):
+        return float(detail)
+    return DETAIL_LEVELS.get(detail, 1.0)
+
+
+def work_resolution(h, w, max_side):
+    """Size to compute masks at: the image size capped at max_side (aspect kept)."""
+    scale = min(1.0, max_side / max(h, w))
+    return max(1, round(h * scale)), max(1, round(w * scale))
+
+
+def work_side(detail):
+    """Mask resolution that is just fine enough for the polygon tolerance:
+    simplification throws away detail below ~tolerance * size / 1000 pixels anyway."""
+    return int(min(2560, max(1024, 1600 / detail_tolerance(detail))))
+
+
 def clean_mask(mask, min_component_frac=0.01, min_pixels=25):
     """Drop the speckles SAM sometimes produces next to the main object.
     Components smaller than `min_component_frac` of the largest one are removed."""
@@ -20,19 +38,21 @@ def clean_mask(mask, min_component_frac=0.01, min_pixels=25):
     return keep[labels]
 
 
-def mask_to_polygons(mask, detail="normal", clean=True):
+def mask_to_polygons(mask, detail="normal", clean=True, scale=(1.0, 1.0)):
     """Convert a binary mask into simplified outer polygons.
 
     Returns a list of polygons, each a list of [x, y] points in image pixels,
-    largest first. Holes are not represented (YOLO polygons cannot hold them)."""
+    largest first. Holes are not represented (YOLO polygons cannot hold them).
+    `scale` = (sx, sy) of the mask relative to the image; points are mapped back
+    to image pixels, and the tolerance is relative to the mask size so it is the
+    same fraction of the image either way."""
     if clean:
         mask = clean_mask(mask)
     mask = np.ascontiguousarray(mask, dtype=np.uint8)
     if not mask.any():
         return []
     h, w = mask.shape[:2]
-    tolerance = DETAIL_LEVELS.get(detail, detail if isinstance(detail, (int, float)) else 1.0)
-    epsilon = max(0.3, tolerance * max(h, w) / 1000.0)
+    epsilon = max(0.3, detail_tolerance(detail) * max(h, w) / 1000.0)
 
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     polygons = []
@@ -43,7 +63,7 @@ def mask_to_polygons(mask, detail="normal", clean=True):
         if len(approx) < 3:
             approx = contour.reshape(-1, 2)
         if len(approx) >= 3:
-            polygons.append(approx.astype(float).tolist())
+            polygons.append((approx.astype(float) / scale).tolist())
     return polygons
 
 

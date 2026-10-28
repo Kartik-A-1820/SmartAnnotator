@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from annotation_processing import mask_to_polygons
+from annotation_processing import mask_to_polygons, work_resolution, work_side
 from image_io import ImageCache
 
 try:
@@ -211,9 +211,18 @@ class _Sam1Adapter:
     def features_finite(self):
         return bool(torch.isfinite(self.predictor.features).all())
 
-    def predict(self, points, labels, box, multimask):
-        masks, scores, _ = self.predictor.predict(
-            point_coords=points, point_labels=labels, box=box, multimask_output=multimask)
+    def predict(self, points, labels, box, multimask, out_hw):
+        # Prompts arrive in out_hw coordinates. Pretending the original image is
+        # out_hw makes SAM map them correctly and upsample masks only to out_hw
+        # instead of the full photo, which is what makes large images fast.
+        p = self.predictor
+        full = p.original_size
+        p.original_size = tuple(out_hw)
+        try:
+            masks, scores, _ = p.predict(point_coords=points, point_labels=labels, box=box,
+                                         multimask_output=multimask)
+        finally:
+            p.original_size = full
         return masks, scores
 
 
@@ -241,10 +250,19 @@ class _Sam2Adapter:
         f = self.predictor._features
         return all(bool(torch.isfinite(t).all()) for t in [f["image_embed"], *f["high_res_feats"]])
 
-    def predict(self, points, labels, box, multimask):
-        masks, scores, _ = self.predictor.predict(
-            point_coords=points, point_labels=labels, box=box, multimask_output=multimask)
+    def predict(self, points, labels, box, multimask, out_hw):
+        p = self.predictor  # same trick as _Sam1Adapter.predict
+        full = p._orig_hw
+        p._orig_hw = [tuple(out_hw)]
+        try:
+            masks, scores, _ = p.predict(point_coords=points, point_labels=labels, box=box,
+                                         multimask_output=multimask)
+        finally:
+            p._orig_hw = full
         return masks > 0.5 if masks.dtype != bool else masks, scores
+
+
+ADAPTERS = {"sam2": _Sam2Adapter, "segment_anything": _Sam1Adapter, "mobile_sam": _Sam1Adapter}
 
 
 class SamEngine:
@@ -272,9 +290,9 @@ class SamEngine:
             checkpoint = ensure_checkpoint(self.spec, progress)
         if progress:
             progress(None, f"Loading {self.spec.label} on {self.device_info.describe()}...")
-        adapter_cls = _Sam2Adapter if self.spec.backend == "sam2" else _Sam1Adapter
-        self._adapter = adapter_cls(self.spec, checkpoint, self.device)
+        self._adapter = ADAPTERS[self.spec.backend](self.spec, checkpoint, self.device)
         self._cache = OrderedDict()
+        self._sizes = {}
         self._cache_size = cache_size
         self._lock = threading.RLock()
         self.current_key = None
@@ -315,26 +333,35 @@ class SamEngine:
                 torch.cuda.synchronize()
             self.current_key = key
             self._cache[key] = self._adapter.get_state()
+            self._sizes[key] = image.shape[:2]
             while len(self._cache) > self._cache_size:
-                self._cache.popitem(last=False)
+                self._sizes.pop(self._cache.popitem(last=False)[0], None)
             return time.perf_counter() - start
 
-    def predict(self, points=None, labels=None, box=None, multimask=None):
-        """Returns (masks[N, H, W] bool, scores[N]) sorted by score, best first."""
+    def predict(self, points=None, labels=None, box=None, multimask=None, max_side=None):
+        """Run the mask decoder on the active image.
+
+        Prompts are in full-image pixels. With `max_side`, masks come back at a
+        reduced working resolution (longest side <= max_side).
+        Returns (masks[N, h, w] bool, scores[N], (sx, sy)) sorted best first, where
+        (sx, sy) maps image coordinates to mask coordinates."""
         with self._lock:
             if self.current_key is None:
                 raise RuntimeError("No image set")
-            pts = np.asarray(points, dtype=np.float32).reshape(-1, 2) if points else None
+            h, w = self._sizes[self.current_key]
+            out_h, out_w = work_resolution(h, w, max_side) if max_side else (h, w)
+            sx, sy = out_w / w, out_h / h
+            pts = np.asarray(points, dtype=np.float32).reshape(-1, 2) * (sx, sy) if points else None
             lbl = np.asarray(labels, dtype=np.int32) if points else None
-            bx = np.asarray(box, dtype=np.float32) if box is not None else None
+            bx = np.asarray(box, dtype=np.float32) * (sx, sy, sx, sy) if box is not None else None
             if multimask is None:
                 # A single click is ambiguous (part vs whole), so ask for 3 candidates
                 multimask = bx is None and pts is not None and len(pts) == 1
             with torch.inference_mode(), self._autocast():
-                masks, scores = self._adapter.predict(pts, lbl, bx, multimask)
+                masks, scores = self._adapter.predict(pts, lbl, bx, multimask, (out_h, out_w))
             scores = np.asarray(scores, dtype=np.float32).reshape(-1)
             order = np.argsort(-scores)
-            return np.asarray(masks)[order].astype(bool), scores[order]
+            return np.asarray(masks)[order].astype(bool), scores[order], (sx, sy)
 
     def release(self):
         with self._lock:
@@ -353,18 +380,22 @@ def load_sam_model(device=None, model_key=None):
 
 def generate_masks(engine, image_array, input_point, input_label=np.array([1])):
     engine.set_image(id(image_array), image_array)
-    masks, _ = engine.predict(np.asarray(input_point).tolist(), np.asarray(input_label).tolist())
+    masks, _, _ = engine.predict(np.asarray(input_point).tolist(), np.asarray(input_label).tolist())
     return masks[:1]
 
 
 # --- Background worker ----------------------------------------------------
 
+PREFETCH_IDLE_SECONDS = 0.8
+
+
 class InferenceWorker(threading.Thread):
     """Runs model loading, image encoding and mask prediction off the UI thread.
 
-    Requests are coalesced: only the newest prediction is kept, and prefetches
-    for images the user has already skipped past are dropped. Results are sent
-    through `emit(event, *payload)` from this thread; the GUI marshals them to Tk."""
+    Requests are coalesced: only the newest prediction (and newest hover
+    preview) is kept, and prefetches for images the user has already skipped
+    past are dropped. Results are sent through `emit(event, *payload)` from this
+    thread; the GUI marshals them to Tk."""
 
     def __init__(self, emit, image_cache=None):
         super().__init__(daemon=True, name="sam-worker")
@@ -374,26 +405,39 @@ class InferenceWorker(threading.Thread):
         self._cond = threading.Condition()
         self._load = None
         self._predict = None
+        self._hover = None
         self._encode = None
         self._prefetch = deque()
         self._stopping = False
+        self._last_interaction = 0.0
 
     # -- requests (called from the UI thread) --
     def load_model(self, model_key, device="auto", precision="auto"):
         with self._cond:
             self._load = (model_key, device, precision)
-            self._predict = None
+            self._predict = self._hover = None
             self._cond.notify()
 
     def set_current_image(self, path, prefetch=()):
         with self._cond:
             self._encode = path
+            self._hover = None
             self._prefetch = deque(p for p in prefetch if p != path)
             self._cond.notify()
 
     def predict(self, request_id, path, points, labels, box, detail):
         with self._cond:
             self._predict = (request_id, path, points, labels, box, detail)
+            self._hover = None
+            self._last_interaction = time.monotonic()
+            self._cond.notify()
+
+    def hover(self, request_id, path, point, detail):
+        """Preview what a click at `point` would select. Only runs when the
+        worker is otherwise idle and the image is already encoded."""
+        with self._cond:
+            self._hover = (request_id, path, point, detail)
+            self._last_interaction = time.monotonic()
             self._cond.notify()
 
     def stop(self):
@@ -417,6 +461,16 @@ class InferenceWorker(threading.Thread):
                     if self._encode:
                         job, self._encode = ("encode", (self._encode, False)), None
                         return job
+                    if self._hover:
+                        job, self._hover = self._hover, None
+                        if self.engine.is_cached(job[1]):
+                            return ("hover", job)
+                    # Pre-encode the next image only once the user pauses, so a
+                    # long encode never delays clicks or hover previews.
+                    idle = time.monotonic() - self._last_interaction
+                    if self._prefetch and idle < PREFETCH_IDLE_SECONDS:
+                        self._cond.wait(PREFETCH_IDLE_SECONDS - idle)
+                        continue
                     while self._prefetch:
                         path = self._prefetch.popleft()
                         if not self.engine.is_cached(path):
@@ -468,6 +522,16 @@ class InferenceWorker(threading.Thread):
         if not prefetch:
             self.emit("encoded", path, seconds)
 
+    def _segment(self, path, points, labels, box, detail, multimask=None, best_only=False):
+        masks, scores, scale = self.engine.predict(points, labels, box, multimask=multimask,
+                                                   max_side=work_side(detail))
+        candidates = []
+        for mask, score in zip(masks[:1] if best_only else masks, scores):
+            polygons = mask_to_polygons(mask, detail, scale=scale)
+            if polygons:
+                candidates.append({"polygons": polygons, "score": float(score)})
+        return candidates
+
     def _do_predict(self, request_id, path, points, labels, box, detail):
         if not self.engine.is_cached(path) and self.engine.current_key != path:
             self.emit("encoding", path)
@@ -475,10 +539,11 @@ class InferenceWorker(threading.Thread):
         if seconds:
             self.emit("encoded", path, seconds)
         start = time.perf_counter()
-        masks, scores = self.engine.predict(points, labels, box)
-        candidates = []
-        for mask, score in zip(masks, scores):
-            polygons = mask_to_polygons(mask, detail)
-            if polygons:
-                candidates.append({"polygons": polygons, "score": float(score)})
+        candidates = self._segment(path, points, labels, box, detail)
         self.emit("prediction", request_id, path, candidates, time.perf_counter() - start)
+
+    def _do_hover(self, request_id, path, point, detail):
+        start = time.perf_counter()
+        self.engine.set_image(path, self.images.get(path))
+        candidates = self._segment(path, [point], [1], None, detail)
+        self.emit("hover_prediction", request_id, path, point, candidates, time.perf_counter() - start)

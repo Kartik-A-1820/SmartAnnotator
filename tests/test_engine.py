@@ -28,15 +28,15 @@ def test_engine_caches_embeddings(key):
     img_a = np.random.randint(0, 255, (120, 160, 3), np.uint8)
     img_b = np.random.randint(0, 255, (90, 70, 3), np.uint8)
     assert engine.set_image("a", img_a) > 0
-    masks, scores = engine.predict([[50, 40]], [1])
+    masks, scores, _ = engine.predict([[50, 40]], [1])
     assert masks.shape == (3, 120, 160) and masks.dtype == bool
     assert list(scores) == sorted(scores, reverse=True)
     engine.set_image("b", img_b)
     assert engine.set_image("a", img_a) == 0.0  # cached: no re-encode
-    masks, _ = engine.predict([[10, 10], [60, 50]], [1, 0], box=[5, 5, 100, 80])
+    masks, _, _ = engine.predict([[10, 10], [60, 50]], [1, 0], box=[5, 5, 100, 80])
     assert masks.shape == (1, 120, 160)
     engine.set_image("b", img_b)
-    masks, _ = engine.predict(None, None, box=[5, 5, 60, 80])
+    masks, _, _ = engine.predict(None, None, box=[5, 5, 60, 80])
     assert masks.shape[1:] == (90, 70)
 
 
@@ -62,3 +62,26 @@ def test_worker_end_to_end(tmp_path):
     assert seen["model_ready"][1] == "sam_vit_b"
     _, rid, p, candidates, _ = seen["prediction"]
     assert rid == 1 and p == path
+
+
+@pytest.mark.parametrize("key", ["sam_vit_b", "sam2.1_tiny"])
+def test_working_resolution_matches_full_resolution(key):
+    """Masks computed at reduced resolution must line up with full-res masks:
+    this validates the prompt/size remapping in the adapters."""
+    if not si.backend_installed(si.MODELS[key].backend):
+        pytest.skip("backend not installed")
+    import cv2
+    torch.manual_seed(0)
+    engine = si.SamEngine(key, si.DeviceInfo("cpu", "cpu"))
+    rng = np.random.default_rng(0)
+    image = rng.integers(0, 255, (900, 1500, 3), dtype=np.uint8)
+    engine.set_image("img", image)
+    for prompt in [dict(points=[[700, 300], [200, 800]], labels=[1, 0]),
+                   dict(box=[300, 200, 1200, 700])]:
+        full, _, scale = engine.predict(**prompt)
+        assert scale == (1.0, 1.0)
+        small, _, (sx, sy) = engine.predict(**prompt, max_side=600)
+        assert small.shape[1:] == (360, 600) and abs(sx - 0.4) < 1e-6
+        ref = cv2.resize(full[0].astype(np.uint8), (600, 360), interpolation=cv2.INTER_AREA) > 0
+        inter, union = (ref & small[0]).sum(), (ref | small[0]).sum()
+        assert union == 0 or inter / union > 0.9

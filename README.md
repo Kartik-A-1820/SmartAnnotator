@@ -22,10 +22,15 @@ It is tuned to run well on consumer hardware, including **4 GB GPUs like the GTX
 
 ## Highlights
 
-- **Instant masks:** each image is encoded by SAM once and cached, so every click afterwards only runs the
-  lightweight mask decoder (about 40 ms even on CPU). The next image is encoded in the background while you work.
-- **No pop-ups:** click to preview a mask, then press **Enter** to accept. Refine with more clicks, exclude regions
-  with right-click, draw a box for hard objects, and press **Tab** to cycle alternative masks.
+- **Roboflow-style smart polygon:** hover to preview what SAM will select, click to include (positive point),
+  right-click or Shift+click to exclude (negative point), drag a box for hard objects, and press **Enter** to accept.
+  **Ctrl+Z** removes the last point and **Tab** cycles alternative masks. There are no pop-ups.
+- **Four tools:** Smart polygon (S), Bounding box (B), Polygon by hand (P) and Edit (V). Edit lets you drag
+  vertices or whole objects, add a vertex by double-clicking an edge, and Shift+click a vertex to delete it.
+- **Instant masks:** each image is encoded by SAM once and cached, so every click only runs the lightweight mask
+  decoder, at a working resolution matched to the polygon detail. On CPU, a click on a 24-megapixel photo returns
+  its mask in about 60-180 ms (it was over 3 s). The next image is pre-encoded while you pause.
+- **Live polygon detail slider:** move it and the current mask is re-traced with more or fewer vertices.
 - **Hardware-aware model selection:** the app detects your GPU and VRAM and picks the best model that fits.
   It downloads checkpoints automatically and uses fp16 on GPUs that run it fast (GTX 16xx, RTX).
 - **Never lose work:** annotations autosave to `smartannotator_project.json` next to your images.
@@ -108,13 +113,14 @@ Options: `--model {auto, mobile_sam, sam2.1_tiny, sam2.1_small, sam2.1_base_plus
 ### Typical workflow
 1. **Open a folder.** Classes and annotations from earlier sessions load automatically.
 2. **Add your classes** in the right panel (Add / Rename / Delete) and pick one with keys **1-9**.
-3. **Click an object.** A mask preview appears right away.
+3. **Smart polygon (S):** hover over an object to see the predicted mask, then click it.
    - Not quite right? **Left-click** more of the object, **right-click** (or Shift+click) to exclude a region,
-     or **drag a box** around it.
+     or **drag a box** around it. **Ctrl+Z** / Backspace removes the last point.
    - Press **Tab** to cycle the alternative masks SAM proposes for a single click.
-4. **Press Enter** (or Space) to accept, then click the next object.
-5. Press **D** / **N** for the next / next unlabeled image.
-6. **Export** (Ctrl+E) when done.
+4. **Press Enter** (or Space) to accept, then hover the next object.
+5. Need a plain box or a hand-drawn shape? Press **B** and drag, or **P** and click the vertices.
+6. Fix anything with **Edit (V)**: drag vertices or the whole object, double-click an edge to add a vertex.
+7. Press **D** / **N** for the next / next unlabeled image, and **Export** (Ctrl+E) when done.
 
 Hover an existing object to highlight it. Press **Del** to delete it, or **C** to change it to the current class.
 
@@ -124,12 +130,19 @@ Hover an existing object to highlight it. Press **Del** to delete it, or **C** t
 
 | Action | Input |
 |---|---|
-| Add point on object | Left click |
-| Exclude region | Right click / Shift+click |
-| Box prompt | Left drag |
-| Accept mask | Enter / Space |
-| Clear prompt | Esc |
+| Tools: smart polygon / box / polygon / edit | S / B / P / V |
+| **Smart:** preview mask | Hover |
+| **Smart:** include region (positive point) | Left click |
+| **Smart:** exclude region (negative point) | Right click / Shift+click |
+| **Smart:** box prompt | Left drag |
+| **Smart:** remove last point | Ctrl+Z / Backspace |
+| Accept mask / close polygon | Enter / Space |
+| Clear prompt / cancel polygon | Esc |
 | Alternative masks | Tab |
+| **Box:** draw box (saved instantly) | Left drag |
+| **Polygon:** add vertex / remove last / close | Click / Backspace or right click / Enter, double-click or click first vertex |
+| **Edit:** move vertex or object | Drag |
+| **Edit:** add / delete vertex | Double-click edge / Shift+click or right click vertex |
 | Select class | 1-9, 0 |
 | Next / previous image | D, Right, PgDn / A, Left, PgUp |
 | Next unlabeled image | N |
@@ -167,8 +180,10 @@ yolo segment train data=path/to/export/data.yaml model=yolo11n-seg.pt
 
 ```bash
 pip install pytest
-python -m pytest tests
+python -m pytest tests            # on a headless Linux box: xvfb-run python -m pytest tests
 ```
 The engine tests run the real SAM / SAM 2 architectures with random weights, so no checkpoint download is needed.
+The UI tests drive the real app with synthetic mouse and keyboard events. They use a stand-in model that segments
+flat-colored shapes, so every tool's result can be checked exactly.
 
 <p align="center"><strong>Happy Annotating!</strong></p>
